@@ -1,0 +1,41 @@
+{
+  "name": "winuc-chat-api",
+  "version": "0.1.0",
+  "description": "简易聊天软件服务端",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev:server": "nodemon server/server.js",
+    "dev:client": "cd client && npm start",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install",
+    "build": "cd client && npm run build",
+    "test": "jest"
+  },
+  "keywords": [
+    "chat",
+    "api",
+    "express",
+    "react",
+    "mongodb"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "concurrently": "^8.2.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.1",
+    "mongoose": "^7.4.3",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "jest": "^29.6.2",
+    "nodemon": "^3.0.1"
+  },
+  "directories": {
+    "doc": "docs"
+  }
+}

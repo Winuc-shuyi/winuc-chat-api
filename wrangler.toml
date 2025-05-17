@@ -1,0 +1,47 @@
+name = "winuc-chat-api"
+main = "workers/index.js"
+compatibility_date = "2023-09-01"
+
+workers_dev = true
+usage_model = "bundled"
+node_compat = true
+
+[env.production]
+vars = { ENVIRONMENT = "production" }
+
+[env.staging]
+vars = { ENVIRONMENT = "staging" }
+
+# 静态资源（前端）
+[site]
+bucket = "./client/build"
+
+# 路由规则
+[routes]
+# 静态资源路由
+pattern = "*/*"
+zone_id = ""
+custom_domain = false
+
+# API路由
+pattern = "api/*"
+script = "workers/index.js"
+
+[build]
+command = "npm run build && cd client && npm run build"
+watch_dir = "server,client/src"
+
+# KV命名空间（可用于缓存）
+# [[kv_namespaces]]
+# binding = "CHAT_CACHE"
+# id = ""
+
+# 定时任务（可用于清理过期消息队列）
+# [triggers]
+# crons = ["0 */1 * * *"] # 每小时执行一次
+
+# 绑定MongoDB数据源（通过Workers连接器）
+# [[services]]
+# binding = "MONGODB"
+# service = "mongodb"
+# environment = "production" 
