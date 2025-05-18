@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📚 项目文档
+    url: https://github.com/yourusername/winuc-chat-api/blob/main/docs
+    about: 在提问前，请先查阅项目文档
+  - name: 💬 讨论区
+    url: https://github.com/yourusername/winuc-chat-api/discussions
+    about: 如需讨论想法或提问，请使用讨论区
+  - name: 🤝 贡献指南
+    url: https://github.com/yourusername/winuc-chat-api/blob/main/CONTRIBUTING.md
+    about: 想要贡献代码？请先阅读贡献指南 
