@@ -147,7 +147,7 @@ const swaggerOptions = {
       }
     }
   },
-  apis: ['./server/models/*.js', './server/routes/*.js'],
+  apis: [path.join(__dirname, 'models', '*.js'), path.join(__dirname, 'routes', '*.js')],
 };
 
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
