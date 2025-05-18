@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const FriendRequest = require('../models/FriendRequest');
+const { Notification } = require('../models/Notification');
 const { protect } = require('../middlewares/auth');
 const mongoose = require('mongoose');
 const MessageQueue = require('../models/MessageQueue');
@@ -507,6 +508,13 @@ router.post('/request', protect, async (req, res, next) => {
       message: message || '请求添加您为好友'
     });
     
+    // 创建好友请求通知
+    await Notification.createFriendRequestNotification(
+      receiverId,
+      senderId,
+      friendRequest._id
+    );
+    
     // 向接收方发送通知消息
     const notificationMessage = {
       type: 'system',
@@ -672,6 +680,12 @@ router.put('/request/:requestId/accept', protect, async (req, res, next) => {
       });
       await sender.save();
     }
+    
+    // 创建好友接受通知
+    await Notification.createFriendAcceptedNotification(
+      sender._id,
+      currentUser._id
+    );
     
     // 向发送方发送通知
     const notificationMessage = {

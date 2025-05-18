@@ -14,6 +14,7 @@ const messageRoutes = require('./routes/message.routes');
 const pollRoutes = require('./routes/poll.routes');
 const friendRoutes = require('./routes/friend.routes');
 const groupRoutes = require('./routes/group.routes');
+const notificationRoutes = require('./routes/notification.routes');
 
 // 导入错误处理中间件
 const errorHandler = require('./middlewares/error');
@@ -78,6 +79,7 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/poll', pollRoutes);
 app.use('/api/friends', friendRoutes);
 app.use('/api/groups', groupRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // API文档路由
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));

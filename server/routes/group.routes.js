@@ -3,6 +3,7 @@ const router = express.Router();
 const Group = require('../models/Group');
 const Message = require('../models/Message');
 const User = require('../models/User');
+const { Notification } = require('../models/Notification');
 const { protect } = require('../middlewares/auth');
 const mongoose = require('mongoose');
 
@@ -489,6 +490,14 @@ router.post('/:groupId/members', protect, async (req, res, next) => {
     
     await group.save();
     
+    // 创建群组邀请通知
+    await Notification.createGroupInviteNotification(
+      userId,
+      currentUserId,
+      group._id,
+      group.name
+    );
+    
     // 向新成员发送系统消息
     const systemMessage = {
       type: 'system',
@@ -593,6 +602,13 @@ router.post('/:groupId/join', protect, async (req, res, next) => {
     });
     
     await group.save();
+    
+    // 创建群组加入通知
+    await Notification.createGroupJoinNotification(
+      groupId,
+      userId,
+      group.name
+    );
     
     // 通知群组管理员
     const adminSystemMessage = {

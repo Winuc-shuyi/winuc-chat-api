@@ -5,6 +5,7 @@ const Message = require('../models/Message');
 const User = require('../models/User');
 const Group = require('../models/Group');
 const MessageQueue = require('../models/MessageQueue');
+const { Notification } = require('../models/Notification');
 const { protect } = require('../middlewares/auth');
 const mongoose = require('mongoose');
 
@@ -91,6 +92,14 @@ router.post('/send', protect, async (req, res, next) => {
     
     // 将消息添加到接收者的消息队列
     await global.MessageQueue.addMessageToQueue(receiverId, message._id);
+    
+    // 创建消息通知
+    await Notification.createMessageNotification(
+      receiverId,
+      senderId,
+      message._id,
+      content.length > 30 ? `${content.substring(0, 30)}...` : content
+    );
     
     // 获取当前用户信息
     const sender = await User.findById(senderId).select('username avatar status');
@@ -206,6 +215,14 @@ router.post('/group/send', protect, async (req, res, next) => {
     for (const member of group.members) {
       if (member.user.toString() !== senderId.toString()) {
         await global.MessageQueue.addMessageToQueue(member.user, message._id);
+        
+        // 为每个群组成员创建消息通知
+        await Notification.createMessageNotification(
+          member.user,
+          senderId,
+          message._id,
+          `[群组: ${group.name}] ${content.length > 20 ? content.substring(0, 20) + '...' : content}`
+        );
       }
     }
     
@@ -289,8 +306,8 @@ router.get('/history/:userId', protect, async (req, res, next) => {
       .sort({ createdAt: -1 }) // 最新消息在前
       .skip(skip)
       .limit(limit)
-      .populate('sender', 'username avatar')
-      .populate('receiver', 'username avatar');
+      .populate('sender', 'username avatar _id status')  // 确保包含_id字段
+      .populate('receiver', 'username avatar _id status');
     
     // 更新接收到的消息状态为已读
     await Message.updateMany(
@@ -298,11 +315,23 @@ router.get('/history/:userId', protect, async (req, res, next) => {
       { isRead: true }
     );
     
+    // 确保每条消息的发送者信息完整
+    const processedMessages = messages.map(message => {
+      const messageObj = message.toObject();
+      
+      // 如果发送者信息不完整，添加必要字段
+      if (messageObj.sender && !messageObj.sender._id) {
+        messageObj.sender._id = message.sender;
+      }
+      
+      return messageObj;
+    });
+    
     res.status(200).json({
       success: true,
       count: messages.length,
       data: {
-        messages: messages.reverse() // 返回时按时间正序排列
+        messages: processedMessages.reverse() // 返回时按时间正序排列
       }
     });
   } catch (err) {
@@ -452,7 +481,6 @@ router.get('/history/:userId/before/:messageId', protect, async (req, res, next)
     
     // 获取参考消息的创建时间
     const referenceMessage = await Message.findById(messageId);
-    
     if (!referenceMessage) {
       return res.status(404).json({
         success: false,
@@ -460,7 +488,7 @@ router.get('/history/:userId/before/:messageId', protect, async (req, res, next)
       });
     }
     
-    // 获取比参考消息更早的消息
+    // 获取更早的消息
     const messages = await Message.find({
       $or: [
         { sender: currentUserId, receiver: userId },
@@ -470,14 +498,26 @@ router.get('/history/:userId/before/:messageId', protect, async (req, res, next)
     })
       .sort({ createdAt: -1 })
       .limit(limit)
-      .populate('sender', 'username avatar')
-      .populate('receiver', 'username avatar');
+      .populate('sender', 'username avatar _id status')
+      .populate('receiver', 'username avatar _id status');
+    
+    // 确保每条消息的发送者信息完整
+    const processedMessages = messages.map(message => {
+      const messageObj = message.toObject();
+      
+      // 如果发送者信息不完整，添加必要字段
+      if (messageObj.sender && !messageObj.sender._id) {
+        messageObj.sender._id = message.sender;
+      }
+      
+      return messageObj;
+    });
     
     res.status(200).json({
       success: true,
-      count: messages.length,
+      count: processedMessages.length,
       data: {
-        messages: messages.reverse()
+        messages: processedMessages.reverse()
       }
     });
   } catch (err) {
@@ -522,7 +562,7 @@ router.get('/history/:userId/before/:messageId', protect, async (req, res, next)
 router.get('/group/history/:groupId', protect, async (req, res, next) => {
   try {
     const { groupId } = req.params;
-    const userId = req.user._id;
+    const currentUserId = req.user._id;
     const limit = parseInt(req.query.limit) || 50;
     const skip = parseInt(req.query.skip) || 0;
     
@@ -542,8 +582,8 @@ router.get('/group/history/:groupId', protect, async (req, res, next) => {
       });
     }
     
-    // 检查用户是否是群组成员
-    if (!group.isMember(userId)) {
+    // 检查当前用户是否是群组成员
+    if (!group.isMember(currentUserId)) {
       return res.status(403).json({
         success: false,
         message: '您不是该群组成员，无法查看消息历史'
@@ -552,16 +592,29 @@ router.get('/group/history/:groupId', protect, async (req, res, next) => {
     
     // 获取群组消息历史
     const messages = await Message.find({ group: groupId })
-      .sort({ createdAt: -1 }) // 最新消息在前
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate('sender', 'username avatar');
+      .populate('sender', 'username avatar _id status')  // 确保包含_id字段
+      .select('-receiver');
+    
+    // 确保每条消息的发送者信息完整
+    const processedMessages = messages.map(message => {
+      const messageObj = message.toObject();
+      
+      // 如果发送者信息不完整，添加必要字段
+      if (messageObj.sender && !messageObj.sender._id) {
+        messageObj.sender._id = message.sender;
+      }
+      
+      return messageObj;
+    });
     
     res.status(200).json({
       success: true,
       count: messages.length,
       data: {
-        messages: messages.reverse() // 返回时按时间正序排列
+        messages: processedMessages.reverse()
       }
     });
   } catch (err) {
@@ -716,7 +769,7 @@ router.get('/group/history/:groupId/time-range', protect, async (req, res, next)
 router.get('/group/history/:groupId/before/:messageId', protect, async (req, res, next) => {
   try {
     const { groupId, messageId } = req.params;
-    const userId = req.user._id;
+    const currentUserId = req.user._id;
     const limit = parseInt(req.query.limit) || 20;
     
     if (!mongoose.Types.ObjectId.isValid(groupId) || !mongoose.Types.ObjectId.isValid(messageId)) {
@@ -735,8 +788,8 @@ router.get('/group/history/:groupId/before/:messageId', protect, async (req, res
       });
     }
     
-    // 检查用户是否是群组成员
-    if (!group.isMember(userId)) {
+    // 检查当前用户是否是群组成员
+    if (!group.isMember(currentUserId)) {
       return res.status(403).json({
         success: false,
         message: '您不是该群组成员，无法查看消息历史'
@@ -745,7 +798,6 @@ router.get('/group/history/:groupId/before/:messageId', protect, async (req, res
     
     // 获取参考消息的创建时间
     const referenceMessage = await Message.findById(messageId);
-    
     if (!referenceMessage) {
       return res.status(404).json({
         success: false,
@@ -753,20 +805,33 @@ router.get('/group/history/:groupId/before/:messageId', protect, async (req, res
       });
     }
     
-    // 获取比参考消息更早的群组消息
+    // 获取更早的消息
     const messages = await Message.find({
       group: groupId,
       createdAt: { $lt: referenceMessage.createdAt }
     })
       .sort({ createdAt: -1 })
       .limit(limit)
-      .populate('sender', 'username avatar');
+      .populate('sender', 'username avatar _id status')
+      .select('-receiver');
+    
+    // 确保每条消息的发送者信息完整
+    const processedMessages = messages.map(message => {
+      const messageObj = message.toObject();
+      
+      // 如果发送者信息不完整，添加必要字段
+      if (messageObj.sender && !messageObj.sender._id) {
+        messageObj.sender._id = message.sender;
+      }
+      
+      return messageObj;
+    });
     
     res.status(200).json({
       success: true,
-      count: messages.length,
+      count: processedMessages.length,
       data: {
-        messages: messages.reverse()
+        messages: processedMessages.reverse()
       }
     });
   } catch (err) {

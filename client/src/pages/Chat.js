@@ -1,40 +1,128 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useFriend } from '../contexts/FriendContext';
 import { useGroup } from '../contexts/GroupContext';
-import { motion } from 'framer-motion';
 import * as messageApi from '../api/messageApi';
 
+// 更强大的ID提取函数，处理各种格式的ID
+const extractId = (obj) => {
+  if (!obj) return null;
+  
+  // 如果是字符串，直接返回
+  if (typeof obj === 'string') return obj;
+  
+  // 如果是对象，尝试获取_id或id
+  if (typeof obj === 'object') {
+    // 尝试从_id获取
+    if (obj._id !== undefined) {
+      // 如果_id是对象且有toString方法
+      if (typeof obj._id === 'object' && obj._id !== null) {
+        try {
+          return obj._id.toString();
+        } catch (error) {
+          console.error('对象_id toString失败:', error);
+          // 尝试其他方式获取ID字符串
+          if (obj._id.$oid) return obj._id.$oid;
+          try {
+            return JSON.stringify(obj._id);
+          } catch (e) {
+            console.error('无法序列化_id对象', e);
+          }
+        }
+      }
+      // 如果_id是字符串
+      if (typeof obj._id === 'string') return obj._id;
+    }
+    
+    // 尝试从id获取
+    if (obj.id !== undefined) {
+      // 如果id是对象且有toString方法
+      if (typeof obj.id === 'object' && obj.id !== null) {
+        try {
+          return obj.id.toString();
+        } catch (error) {
+          console.error('对象id toString失败:', error);
+          // 尝试其他方式获取ID字符串
+          if (obj.id.$oid) return obj.id.$oid;
+          try {
+            return JSON.stringify(obj.id);
+          } catch (e) {
+            console.error('无法序列化id对象', e);
+          }
+        }
+      }
+      // 如果id是字符串
+      if (typeof obj.id === 'string') return obj.id;
+    }
+  }
+  
+  return null;
+};
+
 // 消息气泡组件
-const MessageBubble = ({ message, isOwnMessage }) => {
+const MessageBubble = ({ message, isOwnMessage, currentUser }) => {
   // 格式化时间
   const formatTime = (dateString) => {
     const date = new Date(dateString);
     return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
   };
+  
+  // 从currentUser提取ID
+  const currentUserId = extractId(currentUser);
+  
+  // 确保消息有发送者信息
+  const sender = message.sender || { username: '未知用户', avatar: null };
+  
+  // 从sender提取ID
+  const senderId = extractId(sender);
+  
+  // 判断消息是否由当前用户发送
+  // 优先使用传入的isOwnMessage，否则比较ID
+  const isSentByCurrentUser = isOwnMessage === true ? true : 
+    (currentUserId && senderId ? currentUserId === senderId : false);
 
+  console.log('消息渲染:', {
+    content: message.content && message.content.substring(0, 20) + (message.content.length > 20 ? '...' : ''),
+    currentUserId,
+    senderId,
+    senderUsername: sender.username || '未知',
+    isSentByCurrentUser
+  });
+  
   return (
-    <div className={`flex mb-4 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
-      {!isOwnMessage && (
+    <div className={`flex mb-4 ${isSentByCurrentUser ? 'justify-end' : 'justify-start'}`}>
+      {!isSentByCurrentUser && (
         <div className="flex-shrink-0 mr-2">
           <img 
-            src={message.sender.avatar || '/default-avatar.png'} 
+            src={sender.avatar || '/default-avatar.png'} 
             alt="Avatar" 
             className="w-8 h-8 rounded-full"
           />
         </div>
       )}
       <div className={`max-w-xs rounded-lg p-3 ${
-        isOwnMessage ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-800'
+        isSentByCurrentUser ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-800'
       }`}>
+        {!isSentByCurrentUser && (
+          <p className="text-xs font-semibold mb-1">{sender.username || '未知用户'}</p>
+        )}
         <p className="break-words">{message.content}</p>
         <p className={`text-xs mt-1 text-right ${
-          isOwnMessage ? 'text-blue-100' : 'text-gray-500'
+          isSentByCurrentUser ? 'text-blue-100' : 'text-gray-500'
         }`}>
           {formatTime(message.createdAt)}
         </p>
       </div>
+      {isSentByCurrentUser && (
+        <div className="flex-shrink-0 ml-2">
+          <img 
+            src={currentUser && currentUser.avatar ? currentUser.avatar : '/default-avatar.png'} 
+            alt="Avatar" 
+            className="w-8 h-8 rounded-full"
+          />
+        </div>
+      )}
     </div>
   );
 };
@@ -64,6 +152,194 @@ const Chat = () => {
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const messageEndRef = useRef(null);
   const messageListRef = useRef(null);
+  
+  // 使用useCallback包装加载私聊消息历史函数
+  const loadPrivateMessages = useCallback(async (userId) => {
+    setLoadingMessages(true);
+    try {
+      const messagesData = await messageApi.getMessageHistory(userId);
+      console.log('获取到私聊历史消息:', messagesData);
+      
+      // 确保消息数据有效
+      if (Array.isArray(messagesData)) {
+        // 获取当前用户ID
+        const currentUserId = extractId(currentUser);
+          
+        if (!currentUserId) {
+          console.warn('处理私聊消息时无法获取当前用户ID');
+        }
+        
+        // 验证每条消息的发送者信息
+        const validatedMessages = messagesData.map(msg => {
+          // 如果消息无效，跳过此消息
+          if (!msg) {
+            return null;
+          }
+          
+          // 从消息中提取发送者ID
+          const msgSenderId = extractId(msg.sender);
+            
+          // 检查是否为当前用户发送的消息
+          const isCurrentUserMsg = currentUserId && msgSenderId && currentUserId === msgSenderId;
+          
+          console.log('私聊消息验证:', {
+            content: msg.content && msg.content.substring(0, 20) + (msg.content.length > 20 ? '...' : ''),
+            msgSenderId,
+            currentUserId,
+            isCurrentUserMsg
+          });
+          
+          // 如果发送者信息存在且完整
+          if (msg.sender && (msg.sender._id || msg.sender.id)) {
+            // 如果是当前用户发送的消息，确保有正确的发送者信息
+            if (isCurrentUserMsg) {
+              return {
+                ...msg,
+                sender: {
+                  _id: currentUserId,
+                  username: currentUser.username || '我',
+                  avatar: currentUser.avatar || null
+                }
+              };
+            }
+            return msg;
+          }
+          
+          // 如果是当前用户发送的消息
+          if (isCurrentUserMsg) {
+            return {
+              ...msg,
+              sender: {
+                _id: currentUserId,
+                username: currentUser.username || '我',
+                avatar: currentUser.avatar || null
+              }
+            };
+          }
+          
+          // 如果是对方发送的消息
+          if (activeContact) {
+            return {
+              ...msg,
+              sender: {
+                _id: userId,
+                username: activeContact.name || '联系人',
+                avatar: activeContact.avatar || null
+              }
+            };
+          }
+          
+          // 如果都无法确定，使用占位符信息
+          return {
+            ...msg,
+            sender: {
+              _id: 'unknown',
+              username: '未知用户',
+              avatar: null
+            }
+          };
+        }).filter(msg => msg !== null); // 过滤掉无效消息
+        
+        setMessages(validatedMessages);
+      } else {
+        console.error('消息数据无效:', messagesData);
+        setMessages([]);
+      }
+    } catch (error) {
+      console.error('加载私聊消息失败:', error);
+      setMessages([]);
+    } finally {
+      setLoadingMessages(false);
+    }
+  }, [currentUser, activeContact]);
+  
+  // 使用useCallback包装加载群组消息历史函数
+  const loadGroupMessages = useCallback(async (groupId) => {
+    setLoadingMessages(true);
+    try {
+      const messagesData = await messageApi.getGroupMessageHistory(groupId);
+      console.log('获取到群组历史消息:', messagesData);
+      
+      // 确保消息数据有效
+      if (Array.isArray(messagesData)) {
+        // 获取当前用户ID
+        const currentUserId = extractId(currentUser);
+          
+        if (!currentUserId) {
+          console.warn('处理群组消息时无法获取当前用户ID');
+        }
+        
+        // 验证每条消息的发送者信息
+        const validatedMessages = messagesData.map(msg => {
+          // 如果消息无效，跳过此消息
+          if (!msg) {
+            return null;
+          }
+          
+          // 从消息中提取发送者ID
+          const msgSenderId = extractId(msg.sender);
+            
+          // 检查是否为当前用户发送的消息
+          const isCurrentUserMsg = currentUserId && msgSenderId && currentUserId === msgSenderId;
+          
+          console.log('群组消息验证:', {
+            content: msg.content && msg.content.substring(0, 20) + (msg.content.length > 20 ? '...' : ''),
+            msgSenderId,
+            currentUserId,
+            isCurrentUserMsg
+          });
+          
+          // 如果发送者信息存在且完整
+          if (msg.sender && (msg.sender._id || msg.sender.id)) {
+            // 如果是当前用户发送的消息，确保有正确的发送者信息
+            if (isCurrentUserMsg) {
+              return {
+                ...msg,
+                sender: {
+                  _id: currentUserId,
+                  username: currentUser.username || '我',
+                  avatar: currentUser.avatar || null
+                }
+              };
+            }
+            return msg;
+          }
+          
+          // 如果是当前用户发送的消息
+          if (isCurrentUserMsg) {
+            return {
+              ...msg,
+              sender: {
+                _id: currentUserId,
+                username: currentUser.username || '我',
+                avatar: currentUser.avatar || null
+              }
+            };
+          }
+          
+          // 如果是其他成员发送的消息，但发送者信息不完整
+          return {
+            ...msg,
+            sender: {
+              _id: msgSenderId || 'unknown',
+              username: msg.sender && msg.sender.username ? msg.sender.username : '群组成员',
+              avatar: msg.sender && msg.sender.avatar ? msg.sender.avatar : null
+            }
+          };
+        }).filter(msg => msg !== null); // 过滤掉无效消息
+        
+        setMessages(validatedMessages);
+      } else {
+        console.error('群组消息数据无效:', messagesData);
+        setMessages([]);
+      }
+    } catch (error) {
+      console.error('加载群组消息失败:', error);
+      setMessages([]);
+    } finally {
+      setLoadingMessages(false);
+    }
+  }, [currentUser]);
   
   // 从好友和群组数据生成联系人列表
   useEffect(() => {
@@ -130,83 +406,107 @@ const Chat = () => {
         }
       }
     }
-  }, [userId, groupId, contacts, activeContact]);
-  
-  // 加载私聊消息历史
-  const loadPrivateMessages = async (userId) => {
-    setLoadingMessages(true);
-    try {
-      const messagesData = await messageApi.getMessageHistory(userId);
-      // 确保消息数据有效
-      if (Array.isArray(messagesData)) {
-        setMessages(messagesData);
-      } else {
-        console.error('获取的消息数据格式不正确:', messagesData);
-        setMessages([]);
-      }
-    } catch (error) {
-      console.error('加载消息失败:', error);
-      setMessages([]);
-    } finally {
-      setLoadingMessages(false);
-    }
-  };
+  }, [userId, groupId, contacts, activeContact, loadPrivateMessages, loadGroupMessages]);
   
   // 加载更多私聊历史消息
   const loadMorePrivateMessages = async () => {
-    if (messages.length === 0 || isLoadingMore) return;
+    if (messages.length === 0 || isLoadingMore || !hasMoreMessages) return;
     
     setIsLoadingMore(true);
     try {
-      const oldestMessage = messages[0]; // 获取当前消息列表中最早的消息
-      const olderId = oldestMessage._id;
-      const olderMessages = await messageApi.loadMoreMessages(activeContact.id, olderId);
+      const oldestMessage = messages[messages.length - 1];
+      const oldestMessageId = oldestMessage._id;
       
-      if (Array.isArray(olderMessages) && olderMessages.length > 0) {
-        setMessages(prev => [...olderMessages, ...prev]);
-        setHasMoreMessages(olderMessages.length === 20); // 如果返回的消息数量等于限制数，可能还有更多消息
+      const olderMessages = await messageApi.loadMoreMessages(userId, oldestMessageId);
+      
+      if (olderMessages && olderMessages.length > 0) {
+        // 验证每条消息的发送者信息
+        const validatedOlderMessages = olderMessages.map(msg => {
+          // 如果消息无效，跳过此消息
+          if (!msg) {
+            return null;
+          }
+          
+          // 如果发送者信息存在且完整，直接使用
+          if (msg.sender && (msg.sender._id || msg.sender.id)) {
+            return msg;
+          }
+          
+          // 判断是否为当前用户发送的消息
+          // 由于我们无法确定原始发送者，使用activeContact信息
+          // 此处只能做最合理的猜测，实际应从服务器获取完整信息
+          if (activeContact) {
+            return {
+              ...msg,
+              sender: {
+                _id: userId,
+                username: activeContact.name || '联系人',
+                avatar: activeContact.avatar || null
+              }
+            };
+          }
+          
+          // 如果都无法确定，使用占位符信息
+          return {
+            ...msg,
+            sender: {
+              _id: 'unknown',
+              username: '未知用户',
+              avatar: null
+            }
+          };
+        }).filter(msg => msg !== null); // 过滤掉无效消息
+        
+        setMessages(prevMessages => [...prevMessages, ...validatedOlderMessages]);
+        setHasMoreMessages(olderMessages.length >= 20); // 如果返回的消息少于请求的数量，说明没有更多消息了
       } else {
         setHasMoreMessages(false);
       }
     } catch (error) {
-      console.error('加载更多消息失败:', error);
+      console.error('加载更多私聊消息失败:', error);
     } finally {
       setIsLoadingMore(false);
     }
   };
   
-  // 加载群组消息历史
-  const loadGroupMessages = async (groupId) => {
-    setLoadingMessages(true);
-    try {
-      const messagesData = await messageApi.getGroupMessageHistory(groupId);
-      if (Array.isArray(messagesData)) {
-        setMessages(messagesData);
-      } else {
-        console.error('获取的群组消息数据格式不正确:', messagesData);
-        setMessages([]);
-      }
-    } catch (error) {
-      console.error('加载群组消息失败:', error);
-      setMessages([]);
-    } finally {
-      setLoadingMessages(false);
-    }
-  };
-  
   // 加载更多群组历史消息
   const loadMoreGroupMessages = async () => {
-    if (messages.length === 0 || isLoadingMore) return;
+    if (messages.length === 0 || isLoadingMore || !hasMoreMessages) return;
     
     setIsLoadingMore(true);
     try {
-      const oldestMessage = messages[0]; // 获取当前消息列表中最早的消息
-      const olderId = oldestMessage._id;
-      const olderMessages = await messageApi.loadMoreGroupMessages(activeContact.id, olderId);
+      const oldestMessage = messages[messages.length - 1];
+      const oldestMessageId = oldestMessage._id;
       
-      if (Array.isArray(olderMessages) && olderMessages.length > 0) {
-        setMessages(prev => [...olderMessages, ...prev]);
-        setHasMoreMessages(olderMessages.length === 20); // 如果返回的消息数量等于限制数，可能还有更多消息
+      const olderMessages = await messageApi.loadMoreGroupMessages(groupId, oldestMessageId);
+      
+      if (olderMessages && olderMessages.length > 0) {
+        // 验证每条消息的发送者信息
+        const validatedOlderMessages = olderMessages.map(msg => {
+          // 如果消息无效，跳过此消息
+          if (!msg) {
+            return null;
+          }
+          
+          // 如果发送者信息存在且完整，直接使用
+          if (msg.sender && (msg.sender._id || msg.sender.id)) {
+            return msg;
+          }
+          
+          // 如果发送者信息不完整，但我们知道这不是当前用户发送的
+          // 此处只能做最合理的猜测，实际应从服务器获取完整信息
+          return {
+            ...msg,
+            sender: {
+              _id: msg.senderId || 'unknown',
+              username: '群组成员',
+              avatar: null
+            }
+          };
+        }).filter(msg => msg !== null); // 过滤掉无效消息
+        
+        setMessages(prevMessages => [...prevMessages, ...validatedOlderMessages]);
+        setHasMoreMessages(olderMessages.length >= 20);
       } else {
         setHasMoreMessages(false);
       }
@@ -255,8 +555,38 @@ const Chat = () => {
     if (!message.trim()) return;
     
     try {
+      // 防止currentUser未加载完成
+      if (!currentUser) {
+        console.error('用户信息未加载完成');
+        alert('用户信息未加载完成，请刷新页面后重试');
+        return;
+      }
+      
+      // 添加更详细的日志，帮助调试
+      console.log('发送消息时的currentUser:', currentUser);
+      
+      // 使用优化后的ID提取方法获取用户ID
+      const userId = extractId(currentUser);
+        
+      if (!userId) {
+        console.error('用户ID无效');
+        alert('用户ID无效，请重新登录后再试');
+        return;
+      }
+      
+      // 获取用户名
+      const username = currentUser.username || '我';
+      
+      // 确保有活跃的联系人
+      if (!activeContact || !activeContact.id) {
+        console.error('无效的联系人信息');
+        alert('请选择一个有效的联系人再发送消息');
+        return;
+      }
+      
       if (contactType === 'private') {
         // 发送私聊消息
+        console.log('发送私聊消息给:', activeContact.id);
         const sentMessage = await messageApi.sendMessage(activeContact.id, message);
         
         // 验证返回的消息对象有效性
@@ -264,18 +594,34 @@ const Chat = () => {
           // 确保消息有正确的发送者信息
           const messageToAdd = {
             ...sentMessage,
-            sender: sentMessage.sender || {
-              _id: currentUser._id,
-              username: currentUser.username,
-              avatar: currentUser.avatar
+            // 手动设置发送者为当前用户，确保UI正确识别
+            sender: {
+              _id: userId,
+              username: username,
+              avatar: currentUser.avatar || null
             }
           };
+          
+          console.log('添加到UI的消息:', messageToAdd);
           setMessages(prev => [...prev, messageToAdd]);
         } else {
           console.error('发送消息返回的数据无效:', sentMessage);
+          // 即使服务器返回数据有问题，也在UI上显示消息
+          const fallbackMessage = {
+            _id: 'temp-' + Date.now(),
+            content: message,
+            createdAt: new Date().toISOString(),
+            sender: {
+              _id: userId,
+              username: username,
+              avatar: currentUser.avatar || null
+            }
+          };
+          setMessages(prev => [...prev, fallbackMessage]);
         }
       } else {
         // 发送群组消息
+        console.log('发送群组消息给:', activeContact.id);
         const sentMessage = await messageApi.sendGroupMessage(activeContact.id, message);
         
         // 验证返回的消息对象有效性
@@ -283,25 +629,42 @@ const Chat = () => {
           // 确保消息有正确的发送者信息
           const messageToAdd = {
             ...sentMessage,
-            sender: sentMessage.sender || {
-              _id: currentUser._id,
-              username: currentUser.username,
-              avatar: currentUser.avatar
+            // 手动设置发送者为当前用户，确保UI正确识别
+            sender: {
+              _id: userId,
+              username: username,
+              avatar: currentUser.avatar || null
             }
           };
+          
+          console.log('添加到UI的群组消息:', messageToAdd);
           setMessages(prev => [...prev, messageToAdd]);
         } else {
           console.error('发送群组消息返回的数据无效:', sentMessage);
+          // 即使服务器返回数据有问题，也在UI上显示消息
+          const fallbackMessage = {
+            _id: 'temp-' + Date.now(),
+            content: message,
+            createdAt: new Date().toISOString(),
+            sender: {
+              _id: userId,
+              username: username,
+              avatar: currentUser.avatar || null
+            }
+          };
+          setMessages(prev => [...prev, fallbackMessage]);
         }
       }
       
       setMessage('');
     } catch (error) {
       console.error('发送消息失败:', error);
+      alert('发送消息失败，请稍后重试');
     }
   };
   
   // 进入群组详情
+  // eslint-disable-next-line no-unused-vars
   const handleViewGroupDetails = () => {
     if (contactType === 'group' && activeContact) {
       navigate(`/group-detail/${activeContact.id}`);
@@ -309,12 +672,14 @@ const Chat = () => {
   };
   
   // 格式化时间
+  // eslint-disable-next-line no-unused-vars
   const formatTime = (timestamp) => {
     const date = new Date(timestamp);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
   
   // 格式化好友在线状态
+  // eslint-disable-next-line no-unused-vars
   const getStatusText = (status) => {
     switch (status) {
       case 'online':
@@ -479,15 +844,30 @@ const Chat = () => {
                 暂无消息记录
               </div>
             ) : (
-              messages.map((message) => (
-                <MessageBubble 
-                  key={message._id} 
-                  message={message} 
-                  isOwnMessage={message.sender._id === currentUser._id} 
-                />
-              ))
+              messages.map((message) => {
+                // 使用全局ID提取方法获取用户和消息发送者ID
+                const currUserId = extractId(currentUser);
+                const msgSenderId = extractId(message.sender);
+                
+                console.log('渲染消息:', {
+                  content: message.content && message.content.substring(0, 20) + (message.content.length > 20 ? '...' : ''),
+                  currUserId,
+                  msgSenderId,
+                  isCurrentUserMessage: currUserId === msgSenderId
+                });
+                
+                return (
+                  <MessageBubble 
+                    key={message._id || `temp-${Date.now()}-${Math.random()}`} 
+                    message={message}
+                    isOwnMessage={currUserId === msgSenderId}
+                    currentUser={currentUser}
+                  />
+                );
+              })
             )
           )}
+          <div ref={messageEndRef} />
         </div>
         
         {/* 输入框 */}
