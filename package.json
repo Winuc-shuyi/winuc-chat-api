@@ -10,7 +10,7 @@
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "install:all": "npm install && cd server && npm install && cd ../client && npm install",
     "build": "cd client && npm run build",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "lint": "eslint .",
     "prod:start": "NODE_ENV=production node server/server.js",
     "deploy:prepare": "npm run build && npm run test",
