@@ -5,12 +5,12 @@
 <h1 align="center">WinUC Chat API</h1>
 
 <p align="center">
-  <a href="https://github.com/yourusername/winuc-chat-api/actions"><img src="https://github.com/yourusername/winuc-chat-api/workflows/CI/badge.svg" alt="CI Status"></a>
-  <a href="https://github.com/yourusername/winuc-chat-api/releases"><img src="https://img.shields.io/github/v/release/yourusername/winuc-chat-api" alt="Latest Release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/yourusername/winuc-chat-api" alt="License"></a>
-  <a href="https://github.com/yourusername/winuc-chat-api/stargazers"><img src="https://img.shields.io/github/stars/yourusername/winuc-chat-api" alt="GitHub Stars"></a>
-  <a href="https://github.com/yourusername/winuc-chat-api/network/members"><img src="https://img.shields.io/github/forks/yourusername/winuc-chat-api" alt="GitHub Forks"></a>
-  <a href="https://github.com/yourusername/winuc-chat-api/issues"><img src="https://img.shields.io/github/issues/yourusername/winuc-chat-api" alt="GitHub Issues"></a>
+  <a href="https://github.com/Winuc-shuyi/winuc-chat-api/actions"><img src="https://github.com/Winuc-shuyi/winuc-chat-api/workflows/CI/badge.svg" alt="CI Status"></a>
+  <a href="https://github.com/Winuc-shuyi/winuc-chat-api/releases"><img src="https://img.shields.io/github/v/release/Winuc-shuyi/winuc-chat-api" alt="Latest Release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Winuc-shuyi/winuc-chat-api" alt="License"></a>
+  <a href="https://github.com/Winuc-shuyi/winuc-chat-api/stargazers"><img src="https://img.shields.io/github/stars/Winuc-shuyi/winuc-chat-api" alt="GitHub Stars"></a>
+  <a href="https://github.com/Winuc-shuyi/winuc-chat-api/network/members"><img src="https://img.shields.io/github/forks/Winuc-shuyi/winuc-chat-api" alt="GitHub Forks"></a>
+  <a href="https://github.com/Winuc-shuyi/winuc-chat-api/issues"><img src="https://img.shields.io/github/issues/Winuc-shuyi/winuc-chat-api" alt="GitHub Issues"></a>
 </p>
 
 <p align="center">
