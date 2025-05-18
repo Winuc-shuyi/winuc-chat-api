@@ -99,7 +99,7 @@ export const AuthProvider = ({ children }) => {
         const validatedUser = validateAndSetUser(response.data.user);
         if (validatedUser) {
           setCurrentUser(validatedUser);
-          setIsAuthenticated(true);
+        setIsAuthenticated(true);
         } else {
           throw new Error('用户数据无效');
         }

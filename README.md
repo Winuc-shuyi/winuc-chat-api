@@ -10,7 +10,7 @@
 - 美观的网页前端界面
 - 完整的API文档
 - C++客户端接入指南
-- 支持CloudFlare部署
+- 支持Ubuntu服务器直接部署
 
 ## 技术栈
 
@@ -18,7 +18,7 @@
 - 数据库：MongoDB
 - 前端：React + TailwindCSS + Framer Motion (动画)
 - API文档：Swagger/OpenAPI
-- 部署：支持CloudFlare Pages/Workers
+- 部署：支持Ubuntu服务器部署
 
 ## 项目规划
 
@@ -34,12 +34,14 @@
 | v0.4.0 | D2 | 消息通知系统 | 是 |
 | v0.5.0 | E1 | 网页前端界面开发（React） | 是 |
 | v0.5.0 | E2 | 前端动画与交互体验优化 | 是 |
-| v0.6.0 | F1 | API文档生成（Swagger/OpenAPI） | 否 |
-| v0.6.0 | F2 | C++客户端接入指南编写 | 否 |
-| v0.7.0 | G1 | CloudFlare部署配置 | 否 |
-| v0.7.0 | G2 | 性能优化与安全加固 | 否 |
+| v0.6.0 | F1 | API文档生成（Swagger/OpenAPI） | 是 |
+| v0.6.0 | F2 | C++客户端接入指南编写 | 是 |
+| v0.7.0 | G1 | CloudFlare部署配置 | 是 |
+| v0.7.0 | G2 | 性能优化与安全加固 | 是 |
 | v1.0.0 | H1 | 综合测试与Bug修复 | 是 |
-| v1.0.0 | H2 | 正式版本发布 | 否 |
+| v1.0.0 | H2 | 正式版本发布 | 是 |
+| v1.1.0 | I1 | 从CloudFlare迁移到Ubuntu服务器部署 | 否 |
+| v1.1.0 | I2 | Ubuntu服务器环境优化与监控 | 否 |
 
 ## 项目修复记录
 
@@ -66,6 +68,42 @@
   - 实现了分页加载更多历史消息的功能
   - 优化了消息列表的滚动加载体验
   - 改进了消息气泡组件的UI展示
+
+- 2025-05-27: 完成API文档生成（Swagger/OpenAPI）
+  - 完善了所有API路由的Swagger文档注释
+  - 添加了详细的请求参数、响应模型和错误描述
+  - 为notification.routes.js和poll.routes.js添加了完整的Swagger文档
+  - 优化了API文档结构，确保所有API端点都有清晰的描述和示例
+
+- 2025-05-30: 编写C++客户端接入指南
+  - 创建了完整的C++客户端API接入文档
+  - 实现了所有核心功能的C++调用示例，包括认证、消息收发、好友管理、群组功能等
+  - 提供了长轮询机制的C++实现，实现实时消息接收
+  - 添加了示例应用程序和CMake构建配置
+  - 提供了常见问题解决方案和性能优化建议
+
+- 2025-06-03: 完成性能优化与安全加固
+  - 添加了多层次安全防护机制，包括：请求限流、XSS过滤、输入验证、安全响应头
+  - 优化了数据库访问性能，添加了高效索引和连接池管理
+  - 实现了精细的缓存策略和KV存储支持
+  - 添加了完整的性能监控和指标收集系统
+  - 加强了请求安全检查和错误处理机制
+  - 为Serverless环境优化了代码结构和资源利用
+
+- 2025-06-10: 新增Ubuntu服务器部署需求
+  - 不再使用CloudFlare进行项目部署
+  - 迁移到Ubuntu服务器直接部署方案
+  - 需要调整服务端代码以适应传统服务器环境
+  - 添加服务器运维相关配置（Nginx、PM2等）
+  - 规划服务器监控和日志管理方案
+
+- 2025-06-25: 正式版本v1.0.0发布
+  - 创建详细的CHANGELOG记录版本更新历史
+  - 更新版本号至v1.0.0
+  - 开发发布脚本实现自动化发布流程
+  - 编写完整的Ubuntu服务器部署文档
+  - 添加服务器备份策略和监控配置指南
+  - 所有功能测试完成并修复已知问题
 
 ## 详细功能规划
 
@@ -113,8 +151,9 @@
 
 ### 部署与运维
 
-- CloudFlare Pages前端部署
-- CloudFlare Workers后端部署
+- Ubuntu服务器部署
+- Nginx反向代理配置
+- PM2进程管理
 - 数据库备份与恢复
 - 监控与告警机制
 
@@ -135,6 +174,47 @@
 3. 配置环境变量：复制 `.env.example` 为 `.env` 并填写配置
 4. 启动MongoDB：确保MongoDB服务已运行
 5. 启动开发服务器：`npm run dev`
+
+### 生产环境 (Ubuntu服务器)
+
+1. 准备Ubuntu服务器环境
+   - 安装Node.js (推荐v16+)：`sudo apt update && sudo apt install nodejs npm`
+   - 安装MongoDB：`sudo apt install mongodb`
+   - 安装Nginx：`sudo apt install nginx`
+   - 安装PM2：`sudo npm install -g pm2`
+
+2. 部署应用
+   - 克隆仓库：`git clone https://github.com/yourusername/winuc-chat-api.git`
+   - 安装依赖：`npm run install:all`
+   - 配置环境变量：复制并修改 `.env.example` 为 `.env`
+   - 构建前端：`npm run build`
+   - 使用PM2启动服务：`pm2 start server.js --name winuc-chat-api`
+
+3. 配置Nginx反向代理
+   - 创建Nginx配置文件：`sudo nano /etc/nginx/sites-available/winuc-chat`
+   - 添加以下配置：
+   ```
+   server {
+     listen 80;
+     server_name your-domain.com;
+     
+     location / {
+       proxy_pass http://localhost:3001;
+       proxy_http_version 1.1;
+       proxy_set_header Upgrade $http_upgrade;
+       proxy_set_header Connection 'upgrade';
+       proxy_set_header Host $host;
+       proxy_cache_bypass $http_upgrade;
+     }
+   }
+   ```
+   - 启用站点：`sudo ln -s /etc/nginx/sites-available/winuc-chat /etc/nginx/sites-enabled/`
+   - 测试配置：`sudo nginx -t`
+   - 重启Nginx：`sudo systemctl restart nginx`
+
+4. 设置自动启动
+   - 配置PM2自启动：`pm2 startup`
+   - 保存PM2进程列表：`pm2 save`
 
 ### 环境变量
 

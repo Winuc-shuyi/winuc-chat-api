@@ -40,14 +40,56 @@ const swaggerOptions = {
     openapi: '3.0.0',
     info: {
       title: 'WinUC Chat API',
-      version: '0.1.0',
-      description: '简易聊天软件服务端API文档',
+      version: '1.0.0',
+      description: '简易聊天软件服务端API文档，提供完整的RESTful API接口',
+      contact: {
+        name: 'API Support',
+        email: 'support@winuc-chat.com'
+      },
+      license: {
+        name: 'MIT',
+        url: 'https://opensource.org/licenses/MIT'
+      }
     },
     servers: [
       {
         url: `http://localhost:${PORT}`,
-        description: '开发服务器',
+        description: '开发服务器'
       },
+      {
+        url: 'https://winuc-chat-api.example.com',
+        description: '生产服务器'
+      }
+    ],
+    tags: [
+      {
+        name: 'Auth',
+        description: '用户认证相关API'
+      },
+      {
+        name: 'Users',
+        description: '用户管理相关API'
+      },
+      {
+        name: 'Messages',
+        description: '消息相关API'
+      },
+      {
+        name: 'Friends',
+        description: '好友系统相关API'
+      },
+      {
+        name: 'Groups',
+        description: '群组相关API'
+      },
+      {
+        name: 'Notifications',
+        description: '通知相关API'
+      },
+      {
+        name: 'Poll',
+        description: '长轮询相关API'
+      }
     ],
     components: {
       securitySchemes: {
@@ -55,11 +97,57 @@ const swaggerOptions = {
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'JWT',
-        },
+          description: '请在此处输入您的JWT令牌'
+        }
       },
-    },
+      schemas: {
+        Error: {
+          type: 'object',
+          properties: {
+            success: {
+              type: 'boolean',
+              example: false
+            },
+            message: {
+              type: 'string',
+              example: '发生错误'
+            }
+          }
+        }
+      },
+      responses: {
+        UnauthorizedError: {
+          description: '未授权访问',
+          content: {
+            'application/json': {
+              schema: {
+                $ref: '#/components/schemas/Error'
+              },
+              example: {
+                success: false,
+                message: '未授权，请登录'
+              }
+            }
+          }
+        },
+        NotFoundError: {
+          description: '资源不存在',
+          content: {
+            'application/json': {
+              schema: {
+                $ref: '#/components/schemas/Error'
+              },
+              example: {
+                success: false,
+                message: '请求的资源不存在'
+              }
+            }
+          }
+        }
+      }
+    }
   },
-  apis: ['./models/*.js', './routes/*.js'],
+  apis: ['./server/models/*.js', './server/routes/*.js'],
 };
 
 const swaggerDocs = swaggerJsDoc(swaggerOptions);

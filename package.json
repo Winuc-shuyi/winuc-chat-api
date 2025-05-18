@@ -1,6 +1,6 @@
 {
   "name": "winuc-chat-api",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "简易聊天软件服务端",
   "main": "server/server.js",
   "scripts": {
@@ -10,7 +10,11 @@
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "install:all": "npm install && cd server && npm install && cd ../client && npm install",
     "build": "cd client && npm run build",
-    "test": "jest"
+    "test": "jest",
+    "lint": "eslint .",
+    "prod:start": "NODE_ENV=production node server/server.js",
+    "deploy:prepare": "npm run build && npm run test",
+    "release": "bash scripts/release.sh"
   },
   "keywords": [
     "chat",

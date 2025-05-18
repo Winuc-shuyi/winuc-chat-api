@@ -16,17 +16,97 @@ const { protect } = require('../middlewares/auth');
 
 /**
  * @swagger
+ * components:
+ *   schemas:
+ *     PollSessionResponse:
+ *       type: object
+ *       properties:
+ *         success:
+ *           type: boolean
+ *           example: true
+ *         message:
+ *           type: string
+ *           example: "长轮询会话注册成功"
+ *         data:
+ *           type: object
+ *           properties:
+ *             sessionId:
+ *               type: string
+ *               example: "550e8400-e29b-41d4-a716-446655440000"
+ *             expiresAt:
+ *               type: string
+ *               format: date-time
+ *               example: "2023-06-23T09:30:26.123Z"
+ *     PollMessageResponse:
+ *       type: object
+ *       properties:
+ *         success:
+ *           type: boolean
+ *           example: true
+ *         timestamp:
+ *           type: integer
+ *           example: 1621234567890
+ *         data:
+ *           type: object
+ *           properties:
+ *             messages:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Message'
+ *             systemMessages:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   type:
+ *                     type: string
+ *                     example: "system"
+ *                   content:
+ *                     type: string
+ *                     example: "系统维护通知"
+ *                   timestamp:
+ *                     type: integer
+ *                     example: 1621234567890
+ *             notifications:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   type:
+ *                     type: string
+ *                     example: "status_change"
+ *                   userId:
+ *                     type: string
+ *                     example: "60d21b4667d0d8992e610c84"
+ *                   status:
+ *                     type: string
+ *                     enum: [online, offline, away, busy]
+ *                     example: "online"
+ *                   timestamp:
+ *                     type: integer
+ *                     example: 1621234567890
+ */
+
+/**
+ * @swagger
  * /api/poll/register:
  *   post:
  *     summary: 注册长轮询会话
+ *     description: 创建一个新的长轮询会话，用于接收实时消息
  *     tags: [Polling]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: 会话注册成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/PollSessionResponse'
  *       401:
- *         description: 未授权
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       500:
+ *         description: 服务器错误
  */
 router.post('/register', protect, async (req, res, next) => {
   try {
@@ -60,6 +140,7 @@ router.post('/register', protect, async (req, res, next) => {
  * /api/poll/unregister:
  *   post:
  *     summary: 注销长轮询会话
+ *     description: 注销指定的长轮询会话，停止接收实时消息
  *     tags: [Polling]
  *     security:
  *       - bearerAuth: []
@@ -74,11 +155,39 @@ router.post('/register', protect, async (req, res, next) => {
  *             properties:
  *               sessionId:
  *                 type: string
+ *                 description: 会话ID
+ *                 example: "550e8400-e29b-41d4-a716-446655440000"
  *     responses:
  *       200:
  *         description: 会话注销成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "长轮询会话注销成功"
+ *       400:
+ *         description: 请求参数错误
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "会话ID不能为空"
  *       401:
- *         description: 未授权
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       500:
+ *         description: 服务器错误
  */
 router.post('/unregister', protect, async (req, res, next) => {
   try {
@@ -109,6 +218,10 @@ router.post('/unregister', protect, async (req, res, next) => {
  * /api/poll/messages:
  *   get:
  *     summary: 长轮询获取新消息
+ *     description: |
+ *       通过长轮询获取用户的新消息和通知。
+ *       此API会保持连接打开，直到有新消息可用或超时。
+ *       如果在超时时间内没有新消息，将返回204 No Content状态。
  *     tags: [Polling]
  *     security:
  *       - bearerAuth: []
@@ -119,19 +232,28 @@ router.post('/unregister', protect, async (req, res, next) => {
  *           type: string
  *         required: true
  *         description: 客户端会话ID
+ *         example: "550e8400-e29b-41d4-a716-446655440000"
  *       - in: query
  *         name: timeout
  *         schema:
  *           type: integer
  *           default: 30000
- *         description: 长轮询超时时间（毫秒）
+ *         description: 长轮询超时时间（毫秒），默认30秒
  *     responses:
  *       200:
  *         description: 获取新消息成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/PollMessageResponse'
  *       204:
  *         description: 没有新消息
+ *       400:
+ *         description: 请求参数错误
  *       401:
- *         description: 未授权
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       500:
+ *         description: 服务器错误
  */
 router.get('/messages', protect, async (req, res, next) => {
   try {
@@ -235,6 +357,7 @@ router.get('/messages', protect, async (req, res, next) => {
  * /api/poll/status:
  *   post:
  *     summary: 更新用户在线状态
+ *     description: 更新用户的在线状态，并广播状态变化给好友
  *     tags: [Polling]
  *     security:
  *       - bearerAuth: []
@@ -251,15 +374,32 @@ router.get('/messages', protect, async (req, res, next) => {
  *               status:
  *                 type: string
  *                 enum: [online, offline, away, busy]
+ *                 description: 用户状态
+ *                 example: "online"
  *               sessionId:
  *                 type: string
+ *                 description: 会话ID
+ *                 example: "550e8400-e29b-41d4-a716-446655440000"
  *     responses:
  *       200:
  *         description: 状态更新成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "状态已更新"
  *       400:
- *         description: 无效的状态
+ *         description: 请求参数错误
  *       401:
- *         description: 未授权
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       500:
+ *         description: 服务器错误
  */
 router.post('/status', protect, async (req, res, next) => {
   try {

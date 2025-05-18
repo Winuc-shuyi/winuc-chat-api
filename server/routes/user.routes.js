@@ -16,38 +16,100 @@ const { protect } = require('../middlewares/auth');
  * /api/users:
  *   get:
  *     summary: 获取用户列表
+ *     description: 获取系统中的用户列表，支持分页和搜索
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: 页码
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: 每页显示数量
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: 搜索关键词，检索用户名和邮箱
  *     responses:
  *       200:
  *         description: 获取用户列表成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: 成功获取用户列表
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     users:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/User'
+ *                     pagination:
+ *                       type: object
+ *                       properties:
+ *                         page:
+ *                           type: integer
+ *                           example: 1
+ *                         limit:
+ *                           type: integer
+ *                           example: 10
+ *                         total:
+ *                           type: integer
+ *                           example: 50
+ *                         pages:
+ *                           type: integer
+ *                           example: 5
  *       401:
- *         description: 未授权
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.get('/', protect, async (req, res, next) => {
   try {
-    // 简单分页
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+    const search = req.query.search || '';
+    const startIndex = (page - 1) * limit;
     
-    // 不返回当前用户
-    const users = await User.find({ _id: { $ne: req.user._id } })
+    const query = {};
+    if (search) {
+      query.$or = [
+        { username: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    // 排除当前用户
+    query._id = { $ne: req.user._id };
+    
+    const total = await User.countDocuments(query);
+    const users = await User.find(query)
       .select('username email avatar bio status lastActive')
-      .skip(skip)
+      .skip(startIndex)
       .limit(limit);
-    
-    const total = await User.countDocuments({ _id: { $ne: req.user._id } });
     
     res.status(200).json({
       success: true,
-      count: users.length,
+      message: '成功获取用户列表',
       data: {
         users,
         pagination: {
-          total,
           page,
+          limit,
+          total,
           pages: Math.ceil(total / limit)
         }
       }
@@ -61,7 +123,8 @@ router.get('/', protect, async (req, res, next) => {
  * @swagger
  * /api/users/{id}:
  *   get:
- *     summary: 获取单个用户信息
+ *     summary: 获取特定用户信息
+ *     description: 根据用户ID获取用户详细信息
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -71,28 +134,45 @@ router.get('/', protect, async (req, res, next) => {
  *         required: true
  *         schema:
  *           type: string
+ *         description: 用户ID
  *     responses:
  *       200:
  *         description: 获取用户信息成功
- *       401:
- *         description: 未授权
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: 成功获取用户信息
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       $ref: '#/components/schemas/User'
  *       404:
- *         description: 用户不存在
+ *         $ref: '#/components/responses/NotFoundError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.get('/:id', protect, async (req, res, next) => {
   try {
-    const user = await User.findById(req.params.id)
-      .select('username email avatar bio status lastActive');
+    const user = await User.findById(req.params.id).select('username email avatar bio status lastActive');
     
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: '用户不存在'
+        message: '找不到该用户'
       });
     }
     
     res.status(200).json({
       success: true,
+      message: '成功获取用户信息',
       data: {
         user
       }
@@ -107,6 +187,7 @@ router.get('/:id', protect, async (req, res, next) => {
  * /api/users/profile:
  *   put:
  *     summary: 更新用户个人资料
+ *     description: 更新当前登录用户的个人资料信息
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -117,63 +198,150 @@ router.get('/:id', protect, async (req, res, next) => {
  *           schema:
  *             type: object
  *             properties:
+ *               username:
+ *                 type: string
+ *                 description: 用户名
  *               avatar:
  *                 type: string
+ *                 description: 头像URL
  *               bio:
  *                 type: string
+ *                 description: 个人简介
  *     responses:
  *       200:
- *         description: 个人资料更新成功
+ *         description: 更新用户资料成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: 个人资料更新成功
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       $ref: '#/components/schemas/User'
  *       400:
  *         description: 请求错误
  *       401:
- *         description: 未授权
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
-router.put(
-  '/profile',
-  protect,
-  [
-    body('bio', '个人简介不能超过200个字符').optional().isLength({ max: 200 })
-  ],
-  async (req, res, next) => {
+router.put('/profile', protect, async (req, res, next) => {
     try {
-      const { avatar, bio } = req.body;
+    const { username, avatar, bio } = req.body;
+    const updateFields = {};
       
-      // 查找用户
-      const user = await User.findById(req.user._id);
+    // 验证用户名唯一性
+    if (username && username !== req.user.username) {
+      const existingUser = await User.findOne({ username });
       
-      if (!user) {
-        return res.status(404).json({
+      if (existingUser) {
+        return res.status(400).json({
           success: false,
-          message: '用户不存在'
+          message: '该用户名已被使用'
         });
       }
       
-      // 更新资料
-      if (avatar) user.avatar = avatar;
-      if (bio) user.bio = bio;
+      updateFields.username = username;
+    }
+    
+    if (avatar) updateFields.avatar = avatar;
+    if (bio) updateFields.bio = bio;
       
-      await user.save();
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { $set: updateFields },
+      { new: true }
+    ).select('username email avatar bio status');
       
       res.status(200).json({
         success: true,
         message: '个人资料更新成功',
         data: {
-          user: {
-            id: user._id,
-            username: user.username,
-            email: user.email,
-            avatar: user.avatar,
-            bio: user.bio,
-            status: user.status
-          }
+        user
         }
       });
     } catch (err) {
       next(err);
     }
+});
+
+/**
+ * @swagger
+ * /api/users/status:
+ *   put:
+ *     summary: 更新用户状态
+ *     description: 更新当前登录用户的在线状态
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - status
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [online, offline, away, busy]
+ *                 description: 用户状态
+ *     responses:
+ *       200:
+ *         description: 更新用户状态成功
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: 状态更新成功
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     status:
+ *                       type: string
+ *                       example: online
+ *       400:
+ *         description: 无效的状态值
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ */
+router.put('/status', protect, async (req, res, next) => {
+  try {
+    const { status } = req.body;
+    
+    if (!status || !['online', 'offline', 'away', 'busy'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: '状态值无效'
+      });
+    }
+    
+    await User.findByIdAndUpdate(req.user._id, { status });
+    
+    res.status(200).json({
+      success: true,
+      message: '状态更新成功',
+      data: {
+        status
+      }
+    });
+  } catch (err) {
+    next(err);
   }
-);
+});
 
 /**
  * @swagger
